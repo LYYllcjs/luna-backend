@@ -1,0 +1,11 @@
+# 密钥与本地运行数据不上传
+.env
+models/
+__pycache__/
+*.pyc
+health_analysis_cache.json
+sync_store.json
+deploy_bundle.zip
+test_tts*.wav
+*.backup
+.venv/
