@@ -7,7 +7,8 @@ import soundfile as sf
 
 # sherpa-onnx 运行时：ONNX int8 量化模型推理，无需 torch/funasr，
 # 内存占用从 ~2GB 降到 ~450MB，可在 1GB 内存免费平台运行。
-import sherpa_onnx
+# 注意：sherpa_onnx 为惰性导入——512MB 小内存平台（ASR_ENABLED=0）
+# 即使没装 sherpa-onnx 也能正常启动并提供文字服务。
 
 _model: Any | None = None
 _model_lock = threading.Lock()
@@ -15,6 +16,11 @@ _model_lock = threading.Lock()
 _MODEL_DIR = os.getenv("ASR_MODEL_DIR", os.path.join(os.path.dirname(__file__), "models"))
 _MODEL_PATH = os.getenv("ASR_ONNX_MODEL", os.path.join(_MODEL_DIR, "model.int8.onnx"))
 _TOKENS_PATH = os.getenv("ASR_TOKENS", os.path.join(_MODEL_DIR, "tokens.txt"))
+
+
+def asr_enabled() -> bool:
+    """语音识别总开关：ASR_ENABLED=0/false/no 时关闭（小内存平台用）。"""
+    return os.getenv("ASR_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
 
 
 def _available() -> bool:
@@ -27,10 +33,18 @@ def get_asr_model() -> Any:
     if _model is None:
         with _model_lock:
             if _model is None:
+                if not asr_enabled():
+                    raise RuntimeError("语音识别已被 ASR_ENABLED=0 关闭")
                 if not _available():
                     raise RuntimeError(
                         f"ASR 模型文件缺失：{_MODEL_PATH} / {_TOKENS_PATH}"
                     )
+                try:
+                    import sherpa_onnx
+                except ImportError as error:
+                    raise RuntimeError(
+                        "sherpa-onnx 未安装，语音识别不可用"
+                    ) from error
                 _model = sherpa_onnx.OfflineRecognizer.from_paraformer(
                     paraformer=_MODEL_PATH,
                     tokens=_TOKENS_PATH,

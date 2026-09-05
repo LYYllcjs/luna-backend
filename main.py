@@ -7,12 +7,11 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-import soundfile as sf
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ValidationError
 
-from asr_service import recognize_audio
+from asr_service import asr_enabled, recognize_audio
 from elex_service import ElexServiceError, analyze_health, pet_chat
 from health_analysis_models import HealthAnalysisRequest, HealthAnalysisResponse, request_payload
 
@@ -69,9 +68,12 @@ def _preheat_asr() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    preheat = os.getenv("ASR_PREHEAT", "1").strip().lower() in {"1", "true", "yes", "on"}
-    if preheat:
-        threading.Thread(target=_preheat_asr, daemon=True, name="asr-preheat").start()
+    if not asr_enabled():
+        print("ASR 已关闭（ASR_ENABLED=0）：仅提供文字服务，/upload_voice 将返回 503")
+    else:
+        preheat = os.getenv("ASR_PREHEAT", "1").strip().lower() in {"1", "true", "yes", "on"}
+        if preheat:
+            threading.Thread(target=_preheat_asr, daemon=True, name="asr-preheat").start()
     yield
 
 
@@ -147,11 +149,17 @@ def _write_cached_analysis(key: str, response: HealthAnalysisResponse) -> None:
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "asr": "enabled" if asr_enabled() else "disabled"}
 
 
 @app.post("/upload_voice")
 async def upload_voice(file: UploadFile = File(...)):
+    if not asr_enabled():
+        # 小内存平台（如 512MB 免费实例）关闭语音时，App 会展示该提示
+        raise HTTPException(
+            status_code=503,
+            detail="当前服务器未开启语音识别，请改用文字输入～",
+        )
     if not file.filename:
         raise HTTPException(status_code=400, detail="未提供录音文件")
 
@@ -180,6 +188,8 @@ async def upload_voice(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="仅支持 WAV 格式录音")
 
         try:
+            import soundfile as sf
+
             info = sf.info(temp_path)
         except Exception as error:
             raise HTTPException(status_code=400, detail="WAV 文件无法读取") from error

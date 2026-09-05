@@ -1,0 +1,25 @@
+# Render 部署蓝图（免费档 · 文字版后端）
+# 使用：Render Dashboard -> New + -> Blueprint -> 连接 GitHub 仓库 LYYllcjs/luna-backend
+# 免费实例 512MB 内存，因此关闭语音识别（ASR_ENABLED=0），仅提供文字 AI 服务；
+# /upload_voice 会返回 503，App 自动提示「请改用文字输入」。
+# 需要全功能（含语音）请用 1GB+ 实例，并把 ASR_ENABLED 改为 1、
+# 构建参数 ASR_ENABLED=true（Dashboard -> Settings -> Docker Build Arguments）。
+services:
+  - type: web
+    name: luna-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ASR_ENABLED
+        value: "0"
+      - key: ASR_PREHEAT
+        value: "0"
+      - key: ELEX_MODEL
+        value: gpt-5.6-sol
+      # 密钥不要写进仓库：部署时在 Render 提示框中粘贴 ELEX_API_KEY 的值
+      - key: ELEX_API_KEY
+        sync: false
