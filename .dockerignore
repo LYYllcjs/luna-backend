@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+models/
+*.onnx
+health_analysis_cache.json
+sync_store.json
+*.zip
+.git/
